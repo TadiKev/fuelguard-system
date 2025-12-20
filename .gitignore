@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+
+# Node
+node_modules/
+build/
+
+# Docker
+.env
+.env.*
+.vscode/
+.DS_Store
+
+# Logs
+*.log
+```
+
+---
+
+## `backend/.gitignore`
+
+```text
+*.pyc
+__pycache__/
+.env
+/local_settings.py

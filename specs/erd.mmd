@@ -1,0 +1,80 @@
+%%{init:{ "theme":"default" }}%%
+erDiagram
+    USER ||--o{ PROFILE : has
+    STATION ||--o{ PUMP : has
+    STATION ||--o{ TANK : stores
+    PUMP }o--|| TRANSACTION : generates
+    TRANSACTION ||--o{ RECEIPT : has
+    TRANSACTION ||--o{ ANOMALY : may_have
+    RULE ||--o{ ANOMALY : triggers
+    AUDITLOG }o--|| TRANSACTION : records
+
+    USER {
+      uuid id PK
+      string username
+      string email
+      string phone
+      datetime date_joined
+    }
+    PROFILE {
+      uuid id PK
+      uuid user_id FK
+      string role
+      uuid station_id FK
+      json metadata
+    }
+    STATION {
+      uuid id PK
+      string name
+      string code
+      json location
+    }
+    PUMP {
+      uuid id PK
+      uuid station_id FK
+      int pump_number
+      string fuel_type
+      decimal calibration_factor
+    }
+    TANK {
+      uuid id PK
+      uuid station_id FK
+      decimal capacity_l
+      decimal current_level_l
+      datetime last_read_at
+    }
+    TRANSACTION {
+      uuid id PK
+      uuid pump_id FK
+      uuid station_id FK
+      decimal volume_l
+      decimal total_amount
+      json raw_event
+      datetime timestamp
+      string status
+    }
+    RECEIPT {
+      uuid id PK
+      uuid transaction_id FK
+      string receipt_token
+      datetime sent_at
+    }
+    ANOMALY {
+      uuid id PK
+      uuid transaction_id FK
+      string rule_id
+      string severity
+      json details
+    }
+    AUDITLOG {
+      uuid id PK
+      string action
+      json payload
+      datetime created_at
+    }
+    RULE {
+      uuid id PK
+      string name
+      string rule_type
+      json config
+    }

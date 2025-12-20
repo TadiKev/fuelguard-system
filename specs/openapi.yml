@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  title: FuelGuard API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/v1/auth/login/:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access:
+                    type: string
+                  refresh:
+                    type: string
+
+  /api/v1/transactions/:
+    post:
+      summary: Create a transaction (ingest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionEvent'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+
+  /api/v1/receipts/{token}/verify/:
+    get:
+      summary: Verify a receipt token (public)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  transaction:
+                    type: object
+
+components:
+  schemas:
+    Login:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    TransactionEvent:
+      type: object
+      required:
+        - station_id
+        - pump_id
+        - timestamp
+        - volume_l
+        - unit_price
+        - external_id
+      properties:
+        event_type:
+          type: string
+          enum: ['transaction.created']
+        external_id:
+          type: string
+        station_id:
+          type: string
+          format: uuid
+        pump_id:
+          type: string
+          format: uuid
+        attendant_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        volume_l:
+          type: number
+        unit_price:
+          type: number
+        total_amount:
+          type: number
+        raw_event:
+          type: object
+    TransactionResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        receipt_token:
+          type: string

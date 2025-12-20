@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AnomalyDetected",
+  "type": "object",
+  "required": ["event_type","anomaly_id","rule_id","station_id","timestamp","details"],
+  "properties": {
+    "event_type": { "const": "anomaly.detected" },
+    "anomaly_id": { "type": "string", "format": "uuid" },
+    "rule_id": { "type": "string" },
+    "station_id": { "type": "string", "format": "uuid" },
+    "transaction_id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "severity": { "type": "string" },
+    "details": { "type": "object" }
+  }
+}
