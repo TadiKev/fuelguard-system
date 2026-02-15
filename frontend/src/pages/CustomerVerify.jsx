@@ -3,10 +3,14 @@ import React, { useState } from "react";
 import api from "../services/api";
 
 /**
- * CustomerVerify
- * - POST { receipt_token } -> /receipts/verify/
- * - Fallback GET /receipts/<token>/verify/ (handles django-signed tokens)
- * - Shows 4 visible fields: volume_l, unit_price, total_amount, issued (derived)
+ * CustomerVerify — fixed to call backend (not frontend dev server)
+ *
+ * Important:
+ * - Set VITE_API_BASE to your backend origin (e.g. https://api.example.com or http://localhost:8000)
+ *   in your .env (Vite) for best results.
+ * - If you do not set VITE_API_BASE, this code falls back to api.defaults.baseURL (if available),
+ *   then to window.location.origin.
+ * - Server must allow CORS if frontend and backend are on different origins.
  */
 
 function Badge({ children, tone = "info" }) {
@@ -22,7 +26,6 @@ function Badge({ children, tone = "info" }) {
 function fmtDate(v) {
   if (!v) return "—";
   try {
-    // support numeric unix (s or ms) and ISO strings
     if (typeof v === "number" || /^[0-9]+$/.test(String(v))) {
       const s = String(v);
       const ms = s.length <= 10 ? Number(s) * 1000 : Number(s);
@@ -34,19 +37,14 @@ function fmtDate(v) {
   }
 }
 
-// recursive search for first matching key in nested object/array
+// shallow-first recursive find
 function findKey(obj, targetKeys = []) {
   if (obj == null) return undefined;
   if (typeof obj !== "object") return undefined;
 
-  // quick check at this level
   for (const key of Object.keys(obj)) {
-    if (targetKeys.includes(key)) {
-      return obj[key];
-    }
+    if (targetKeys.includes(key)) return obj[key];
   }
-
-  // deeper search
   for (const key of Object.keys(obj)) {
     try {
       const val = obj[key];
@@ -54,27 +52,119 @@ function findKey(obj, targetKeys = []) {
         const found = findKey(val, targetKeys);
         if (found !== undefined) return found;
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
   return undefined;
 }
 
+/* ------------------ determine backend base URL ------------------ */
+
+function normalizeBaseUrl(u) {
+  if (!u) return null;
+  // remove trailing slash
+  return u.replace(/\/+$/, "");
+}
+
+const ENV_API_BASE = typeof import.meta !== "undefined" ? import.meta.env?.VITE_API_BASE : undefined;
+const API_BASE =
+  normalizeBaseUrl(ENV_API_BASE) ||
+  (api && api.defaults && api.defaults.baseURL ? normalizeBaseUrl(api.defaults.baseURL) : null) ||
+  normalizeBaseUrl(window.location.origin);
+
+/* ------------------ candidate endpoints (absolute) ------------------ */
+
+function abs(path) {
+  // if path already absolute (starts with http), return as-is
+  if (/^https?:\/\//i.test(path)) return path;
+  // allow leading slash
+  const p = path.replace(/^\/+/, "");
+  return `${API_BASE}/${p}`;
+}
+
+const POST_CANDIDATES = [
+  abs("api/receipts/verify/"),
+  abs("receipts/verify/"),
+  abs("api/v1/receipts/verify/"),
+  abs("v1/receipts/verify/"),
+];
+
+const GET_LEGACY_CANDIDATES = (token) => [
+  abs(`receipts/${encodeURIComponent(token)}/verify/`),
+  abs(`api/receipts/${encodeURIComponent(token)}/verify/`),
+  abs(`api/v1/receipts/${encodeURIComponent(token)}/verify/`),
+  abs(`v1/receipts/${encodeURIComponent(token)}/verify/`),
+];
+
+/* ------------------ helpers to detect HTML responses ------------------ */
+
+function looksLikeHtml(text) {
+  if (!text || typeof text !== "string") return false;
+  const s = text.trim().slice(0, 200).toLowerCase();
+  return s.startsWith("<!doctype") || s.startsWith("<html") || s.includes("vite/client") || s.includes("<div id=\"root\"");
+}
+
+/* ------------------ network attempts (public-first) ------------------ */
+
+async function tryPublicPostEndpoints(token) {
+  for (const url of POST_CANDIDATES) {
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receipt_token: token }),
+        // if backend is same-origin and uses cookies, keep credentials; this is fine for many setups.
+        credentials: "include",
+      });
+
+      const text = await resp.text().catch(() => null);
+      if (looksLikeHtml(text)) {
+        // not the API — skip this candidate
+        continue;
+      }
+
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+
+      return { ok: resp.ok, status: resp.status, url, data };
+    } catch (e) {
+      // network error or CORS/blocking — try next
+      continue;
+    }
+  }
+  return { ok: false, error: "No public POST endpoint responded" };
+}
+
+async function tryPublicGetLegacy(token) {
+  const candidates = GET_LEGACY_CANDIDATES(token);
+  for (const url of candidates) {
+    try {
+      const resp = await fetch(url, { method: "GET", credentials: "include" });
+      const text = await resp.text().catch(() => null);
+      if (looksLikeHtml(text)) continue;
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      return { ok: resp.ok, status: resp.status, url, data };
+    } catch (e) {
+      continue;
+    }
+  }
+  return { ok: false, error: "No public GET legacy endpoint responded" };
+}
+
+/* ------------------ Component ------------------ */
+
 export default function CustomerVerify() {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { ok: bool, data | error, source }
-
-  async function tryLegacyGet(t) {
-    try {
-      const res = await api.get(`receipts/${encodeURIComponent(t)}/verify/`);
-      return { ok: !!res.data.valid, data: res.data, source: "get" };
-    } catch (e) {
-      const payload = e?.response?.data ?? e?.message ?? String(e);
-      return { ok: false, error: payload, source: "get" };
-    }
-  }
+  const [result, setResult] = useState(null);
 
   async function submit(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -88,24 +178,65 @@ export default function CustomerVerify() {
     }
 
     try {
-      const { data } = await api.post("receipts/verify/", { receipt_token: t });
+      // 1) Try public POST endpoints (absolute URLs) — no Authorization header
+      const postResp = await tryPublicPostEndpoints(t);
 
-      if (data && data.valid === false && data.reason === "bad_token_format") {
-        // fallback: legacy GET accepts colon-containing tokens
-        const fallback = await tryLegacyGet(t);
-        setResult(fallback);
-      } else {
-        setResult({ ok: data.valid !== false, data, source: "post" });
+      if (postResp && postResp.data !== undefined && postResp.data !== null) {
+        const data = postResp.data;
+        // handle bad_token_format -> legacy GET fallback
+        if (data && data.valid === false && data.reason === "bad_token_format") {
+          const legacy = await tryPublicGetLegacy(t);
+          if (legacy && legacy.data !== undefined && legacy.data !== null) {
+            setResult({ ok: !!legacy.data.valid, data: legacy.data, source: "get-public", url: legacy.url, status: legacy.status });
+            setLoading(false);
+            return;
+          }
+          setResult({ ok: false, error: legacy.error || "Legacy GET fallback failed", source: "get-public" });
+          setLoading(false);
+          return;
+        }
+
+        setResult({ ok: data && data.valid !== false, data, source: "post-public", url: postResp.url, status: postResp.status });
+        setLoading(false);
+        return;
+      }
+
+      // 2) If public POST returned nothing JSON but ok, accept success
+      if (postResp && postResp.ok) {
+        setResult({ ok: true, data: null, source: "post-public", url: postResp.url, status: postResp.status });
+        setLoading(false);
+        return;
+      }
+
+      // 3) Try public legacy GET endpoints
+      const legacy = await tryPublicGetLegacy(t);
+      if (legacy && legacy.data !== undefined && legacy.data !== null) {
+        setResult({ ok: !!legacy.data.valid, data: legacy.data, source: "get-public", url: legacy.url, status: legacy.status });
+        setLoading(false);
+        return;
+      }
+
+      // 4) Last resort: use authenticated api client (keeps compatibility)
+      try {
+        const { data } = await api.post("receipts/verify/", { receipt_token: t });
+        if (data && data.valid === false && data.reason === "bad_token_format") {
+          // try legacy GET via api client
+          try {
+            const res = await api.get(`receipts/${encodeURIComponent(t)}/verify/`);
+            setResult({ ok: !!res.data.valid, data: res.data, source: "get-auth" });
+          } catch (e) {
+            const payload = e?.response?.data ?? e?.message ?? String(e);
+            setResult({ ok: false, error: payload, source: "get-auth" });
+          }
+        } else {
+          setResult({ ok: data.valid !== false, data, source: "post-auth" });
+        }
+      } catch (authErr) {
+        const payload = authErr?.response?.data ?? authErr?.message ?? String(authErr);
+        setResult({ ok: false, error: payload, source: "post-auth" });
       }
     } catch (err) {
-      const payload = err?.response?.data;
-      if (payload && payload.valid === false && payload.reason === "bad_token_format") {
-        const fallback = await tryLegacyGet(t);
-        setResult(fallback);
-      } else {
-        const ebody = payload ?? err?.message ?? String(err);
-        setResult({ ok: false, error: ebody, source: "post" });
-      }
+      setResult({ ok: false, error: String(err), source: "exception" });
     } finally {
       setLoading(false);
     }
@@ -176,13 +307,11 @@ export default function CustomerVerify() {
       );
     }
 
-    // success: extract the four fields from whatever nested shape returned
+    // success
     const payload = result.data ?? {};
-    // search for the numeric fields anywhere in the payload
     const volume = findKey(payload, ["volume_l", "volume", "vol"]);
     const unit_price = findKey(payload, ["unit_price", "unitPrice", "price", "unit"]);
     const total_amount = findKey(payload, ["total_amount", "total", "amount"]);
-    // find issued timestamp (issued_at, timestamp, measured_at, created_at)
     const issuedRaw = findKey(payload, ["issued_at", "issued", "timestamp", "measured_at", "created_at"]);
 
     const volumeDisplay = volume !== undefined && volume !== null ? String(volume) : "—";
@@ -195,7 +324,7 @@ export default function CustomerVerify() {
         <div className="flex items-center gap-3">
           <Badge tone="success">Valid</Badge>
           <div className="font-medium text-emerald-800">Receipt verified</div>
-          <div className="text-xs text-slate-500 ml-2">via {result.source === "get" ? "legacy GET" : "POST verify"}</div>
+          <div className="text-xs text-slate-500 ml-2">via {result.source || "public"}</div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
