@@ -9,3 +9,15 @@ channels
 channels-redis
 python-dotenv
 gunicorn>=21.2
+dj-database-url
+django-cors-headers
+jsonschema
+asgiref
+uvicorn
+celery
+redis
+requests>=2.30.0
+django-cors-headers==4.0.0
+uvicorn[standard]
+websockets
+daphne

@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+  --brand-50: #f5fbff;
+  --brand-100: #e6f4ff;
+  --brand-200: #bfe6ff;
+  --brand-500: #1e90ff; /* primary */
+  --accent-500: #7c3aed; /* accent */
+  --muted: #6b7280;
+}
+
+@layer components {
+
+  /* small helper card */
+  .card {
+    @apply bg-white dark:bg-slate-800 rounded-2xl shadow p-4;
+  }
+
+  /* Glass-style card (SAFE for @apply) */
+  .glass {
+    @apply
+      rounded-2xl
+      bg-white bg-opacity-5
+      backdrop-blur-md
+      border border-white border-opacity-10
+      shadow-lg
+      p-4;
+  }
+
+  /* Header / section titles */
+  .section-title {
+    @apply flex items-center gap-2 font-semibold text-lg;
+  }
+
+  /* muted small text helper */
+  .small-muted {
+    @apply text-sm text-gray-400;
+  }
+
+  /* centralized badge styles */
+  .pill {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* primary gradient button */
+  .btn-primary {
+    background: linear-gradient(
+      90deg,
+      rgba(30,144,255,1) 0%,
+      rgba(124,58,237,1) 100%
+    );
+    color: white;
+    @apply px-3 py-2 rounded-lg font-medium shadow;
+  }
+
+  /* ghost button */
+  .btn-ghost {
+    @apply
+      px-3 py-2
+      rounded-lg
+      border
+      bg-white bg-opacity-5
+      text-white text-opacity-90
+      hover:bg-opacity-10;
+  }
+
+  /* token highlight box */
+  .token-card {
+    background: linear-gradient(
+      90deg,
+      rgba(243,250,255,0.9),
+      rgba(235,244,255,0.9)
+    );
+    border: 1px solid rgba(30,144,255,0.12);
+    @apply rounded-xl p-3;
+  }
+
+  /* subtle scrollbar */
+  .scrollbar-slim::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+  }
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+  }
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .section-title { font-size: 1rem; }
+}
